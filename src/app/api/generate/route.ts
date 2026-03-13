@@ -6,20 +6,21 @@ import { buildGenerationPrompt } from '@/lib/ai/prompt-builder'
 import { StreamParser } from '@/lib/ai/stream-parser'
 import { validateCsrfToken } from '@/lib/security/csrf'
 import { checkOrigin } from '@/lib/security/origin-check'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 
 const GenerateRequestSchema = z.object({
   userPrompt: z.string().min(1, 'userPrompt must not be empty'),
   canvasHtml: z.string(),
   canvasCss: z.string(),
-  provider: z.enum(['claude', 'openai', 'gemini']).optional().default('claude'),
+  provider: z.enum(['claude', 'openai', 'gemini']).optional().default('gemini'),
   /** Optional client-supplied API key (MVP convenience — do not persist server-side). */
   apiKey: z.string().optional(),
 })
 
 type StreamEvent =
-  | { type: 'text'; content: string }
-  | { type: 'html'; content: string }
-  | { type: 'css'; content: string }
+  | { type: 'text'; value: string }
+  | { type: 'html'; value: string }
+  | { type: 'css'; value: string }
   | { type: 'done' }
   | { type: 'error'; message: string }
 
@@ -58,10 +59,26 @@ export async function POST(request: Request): Promise<Response> {
 
   const { userPrompt, canvasHtml, canvasCss, provider, apiKey } = parsed.data
 
-  // 4. Build the generation prompt
+  // 4. Rate limit check
+  const ipHeader = request.headers.get('x-forwarded-for')
+  const rateLimitKey = ipHeader?.split(',')[0]?.trim() || request.headers.get('Origin') || 'anonymous'
+  const rateLimit = checkRateLimit(rateLimitKey)
+  if (!rateLimit.allowed) {
+    return Response.json(
+      { error: 'Rate limit exceeded', retryAfterSeconds: rateLimit.retryAfterSeconds },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(rateLimit.retryAfterSeconds),
+        },
+      },
+    )
+  }
+
+  // 5. Build the generation prompt
   const prompt = buildGenerationPrompt({ userPrompt, canvasHtml, canvasCss })
 
-  // 5. Stream from provider, parse chunks, forward as NDJSON events
+  // 6. Stream from provider, parse chunks, forward as NDJSON events
   const adapter = getProvider(provider as ProviderName, apiKey)
   const parser = new StreamParser()
   const encoder = new TextEncoder()
@@ -73,13 +90,13 @@ export async function POST(request: Request): Promise<Response> {
           const result = parser.push(chunk.text)
 
           if (result.visibleText) {
-            controller.enqueue(encodeEvent(encoder, { type: 'text', content: result.visibleText }))
+            controller.enqueue(encodeEvent(encoder, { type: 'text', value: result.visibleText }))
           }
           if (result.htmlDelta) {
-            controller.enqueue(encodeEvent(encoder, { type: 'html', content: result.htmlDelta }))
+            controller.enqueue(encodeEvent(encoder, { type: 'html', value: result.htmlDelta }))
           }
           if (result.cssDelta) {
-            controller.enqueue(encodeEvent(encoder, { type: 'css', content: result.cssDelta }))
+            controller.enqueue(encodeEvent(encoder, { type: 'css', value: result.cssDelta }))
           }
 
           if (chunk.done) break
@@ -87,15 +104,26 @@ export async function POST(request: Request): Promise<Response> {
 
         const flushed = parser.flush()
         if (flushed.visibleText) {
-          controller.enqueue(encodeEvent(encoder, { type: 'text', content: flushed.visibleText }))
+          controller.enqueue(encodeEvent(encoder, { type: 'text', value: flushed.visibleText }))
+        }
+        if (flushed.htmlDelta) {
+          controller.enqueue(encodeEvent(encoder, { type: 'html', value: flushed.htmlDelta }))
+        }
+        if (flushed.cssDelta) {
+          controller.enqueue(encodeEvent(encoder, { type: 'css', value: flushed.cssDelta }))
         }
 
         controller.enqueue(encodeEvent(encoder, { type: 'done' }))
       } catch (err) {
+        console.error('Generate API stream failed', {
+          provider,
+          error: err instanceof Error ? err.message : String(err),
+        })
+
         controller.enqueue(
           encodeEvent(encoder, {
             type: 'error',
-            message: err instanceof Error ? err.message : 'Generation failed',
+            message: 'Generation failed',
           }),
         )
       }

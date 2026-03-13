@@ -1,16 +1,19 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/security/csrf'
+import { clearRateLimitState } from '@/lib/security/rate-limit'
+
+const streamGenerateMock = vi.fn(async function* () {
+  yield { text: '<lumio-ai-html><main>Hello</main></lumio-ai-html>', done: false }
+  yield { text: '<lumio-ai-css>main { margin: 0; }</lumio-ai-css>', done: false }
+  yield { text: ' Great, done!', done: false }
+  yield { text: '', done: true }
+})
 
 // Mock the provider factory so no real API calls are made in integration tests
 vi.mock('@/lib/ai/providers/factory', () => ({
   getProvider: vi.fn().mockReturnValue({
-    streamGenerate: async function* () {
-      yield { text: '<lumio-ai-html><main>Hello</main></lumio-ai-html>', done: false }
-      yield { text: '<lumio-ai-css>main { margin: 0; }</lumio-ai-css>', done: false }
-      yield { text: ' Great, done!', done: false }
-      yield { text: '', done: true }
-    },
+    streamGenerate: streamGenerateMock,
   }),
 }))
 
@@ -40,6 +43,11 @@ function makeRequest(opts: {
 }
 
 describe('POST /api/generate', () => {
+  beforeEach(() => {
+    streamGenerateMock.mockClear()
+    clearRateLimitState()
+  })
+
   describe('origin guard', () => {
     test('rejects request with no Origin header', async () => {
       const req = makeRequest({ csrfHeader: VALID_TOKEN, csrfCookie: VALID_TOKEN })
@@ -110,6 +118,56 @@ describe('POST /api/generate', () => {
     })
   })
 
+  describe('rate limiting', () => {
+    test('rejects request when rate limit is exceeded', async () => {
+      for (let i = 0; i < 20; i += 1) {
+        const req = makeRequest({
+          origin: VALID_ORIGIN,
+          csrfHeader: VALID_TOKEN,
+          csrfCookie: VALID_TOKEN,
+        })
+        req.headers.set('x-forwarded-for', '127.0.0.1')
+        const res = await POST(req)
+        expect(res.status).toBe(200)
+      }
+
+      const blockedReq = makeRequest({
+        origin: VALID_ORIGIN,
+        csrfHeader: VALID_TOKEN,
+        csrfCookie: VALID_TOKEN,
+      })
+      blockedReq.headers.set('x-forwarded-for', '127.0.0.1')
+      const blockedRes = await POST(blockedReq)
+      expect(blockedRes.status).toBe(429)
+      const blockedBody = await blockedRes.json()
+      expect(blockedBody.error).toMatch(/rate limit/i)
+      expect(typeof blockedBody.retryAfterSeconds).toBe('number')
+    })
+  })
+
+  describe('error safety', () => {
+    test('streams generic error message when provider throws', async () => {
+      streamGenerateMock.mockImplementationOnce(async function* () {
+        throw new Error('OpenAI upstream detail leak')
+      })
+
+      const req = makeRequest({
+        origin: VALID_ORIGIN,
+        csrfHeader: VALID_TOKEN,
+        csrfCookie: VALID_TOKEN,
+      })
+      const res = await POST(req)
+      const text = await res.text()
+      const lines = text.split('\n').filter(Boolean)
+      const events = lines.map((l) => JSON.parse(l) as { type: string; message?: string })
+      const errorEvent = events.find((e) => e.type === 'error')
+
+      expect(errorEvent).toBeDefined()
+      expect(errorEvent?.message).toBe('Generation failed')
+      expect(errorEvent?.message).not.toContain('upstream')
+    })
+  })
+
   describe('happy path', () => {
     test('returns 200 with a streaming response for valid request', async () => {
       const req = makeRequest({
@@ -130,11 +188,11 @@ describe('POST /api/generate', () => {
       const res = await POST(req)
       const text = await res.text()
       const lines = text.split('\n').filter(Boolean)
-      const events = lines.map((l) => JSON.parse(l) as { type: string; content?: string })
+      const events = lines.map((l) => JSON.parse(l) as { type: string; value?: string })
 
       const htmlEvent = events.find((e) => e.type === 'html')
       expect(htmlEvent).toBeDefined()
-      expect(htmlEvent?.content).toBe('<main>Hello</main>')
+      expect(htmlEvent?.value).toBe('<main>Hello</main>')
     })
 
     test('stream contains css event from mocked provider', async () => {
@@ -146,11 +204,11 @@ describe('POST /api/generate', () => {
       const res = await POST(req)
       const text = await res.text()
       const lines = text.split('\n').filter(Boolean)
-      const events = lines.map((l) => JSON.parse(l) as { type: string; content?: string })
+      const events = lines.map((l) => JSON.parse(l) as { type: string; value?: string })
 
       const cssEvent = events.find((e) => e.type === 'css')
       expect(cssEvent).toBeDefined()
-      expect(cssEvent?.content).toBe('main { margin: 0; }')
+      expect(cssEvent?.value).toBe('main { margin: 0; }')
     })
 
     test('stream ends with a done event', async () => {
@@ -175,11 +233,11 @@ describe('POST /api/generate', () => {
       const res = await POST(req)
       const text = await res.text()
       const lines = text.split('\n').filter(Boolean)
-      const events = lines.map((l) => JSON.parse(l) as { type: string; content?: string })
+      const events = lines.map((l) => JSON.parse(l) as { type: string; value?: string })
 
       const textEvents = events.filter((e) => e.type === 'text')
       for (const ev of textEvents) {
-        expect(ev.content).not.toMatch(/lumio-ai-html|lumio-ai-css/)
+        expect(ev.value).not.toMatch(/lumio-ai-html|lumio-ai-css/)
       }
     })
   })

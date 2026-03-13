@@ -7,6 +7,31 @@ type AnthropicSseEvent = {
   delta?: { type: string; text?: string }
 }
 
+const PROVIDER_TIMEOUT_MS = 30_000
+
+export const createTimeoutController = (timeoutMs = PROVIDER_TIMEOUT_MS) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    controller.abort('Provider request timeout')
+  }, timeoutMs)
+
+  return { controller, timeoutId }
+}
+
+export const withProviderTimeout = (
+  transport: ProviderStreamTransport,
+  timeoutMs = PROVIDER_TIMEOUT_MS,
+): ProviderStreamTransport =>
+  async function* (input) {
+    const { controller, timeoutId } = createTimeoutController(timeoutMs)
+
+    try {
+      yield* transport(input, controller.signal)
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  }
+
 async function* streamAnthropicResponse(
   response: Response,
 ): AsyncIterable<ProviderChunk> {
@@ -47,8 +72,8 @@ async function* streamAnthropicResponse(
   yield { text: '', done: true }
 }
 
-export const claudeTransport = (apiKey?: string): ProviderStreamTransport =>
-  async function* (input) {
+const baseClaudeTransport = (apiKey?: string): ProviderStreamTransport =>
+  async function* (input, signal) {
     const resolvedKey = apiKey ?? process.env.ANTHROPIC_API_KEY
     if (!resolvedKey) throw new Error('ANTHROPIC_API_KEY is not configured')
 
@@ -65,6 +90,7 @@ export const claudeTransport = (apiKey?: string): ProviderStreamTransport =>
         stream: true,
         messages: [{ role: 'user', content: input.prompt }],
       }),
+      signal,
     })
 
     if (!response.ok) {
@@ -74,6 +100,9 @@ export const claudeTransport = (apiKey?: string): ProviderStreamTransport =>
 
     yield* streamAnthropicResponse(response)
   }
+
+export const claudeTransport = (apiKey?: string): ProviderStreamTransport =>
+  withProviderTimeout(baseClaudeTransport(apiKey))
 
 // ── OpenAI ────────────────────────────────────────────────────────────────────
 
@@ -117,8 +146,8 @@ async function* streamOpenAiResponse(response: Response): AsyncIterable<Provider
   yield { text: '', done: true }
 }
 
-export const openaiTransport = (apiKey?: string): ProviderStreamTransport =>
-  async function* (input) {
+const baseOpenaiTransport = (apiKey?: string): ProviderStreamTransport =>
+  async function* (input, signal) {
     const resolvedKey = apiKey ?? process.env.OPENAI_API_KEY
     if (!resolvedKey) throw new Error('OPENAI_API_KEY is not configured')
 
@@ -133,6 +162,7 @@ export const openaiTransport = (apiKey?: string): ProviderStreamTransport =>
         stream: true,
         messages: [{ role: 'user', content: input.prompt }],
       }),
+      signal,
     })
 
     if (!response.ok) {
@@ -142,6 +172,9 @@ export const openaiTransport = (apiKey?: string): ProviderStreamTransport =>
 
     yield* streamOpenAiResponse(response)
   }
+
+export const openaiTransport = (apiKey?: string): ProviderStreamTransport =>
+  withProviderTimeout(baseOpenaiTransport(apiKey))
 
 // ── Gemini ────────────────────────────────────────────────────────────────────
 
@@ -179,10 +212,10 @@ async function* streamGeminiResponse(response: Response): AsyncIterable<Provider
   yield { text: '', done: true }
 }
 
-export const geminiTransport = (apiKey?: string): ProviderStreamTransport =>
-  async function* (input) {
-    const resolvedKey = apiKey ?? process.env.GEMINI_API_KEY
-    if (!resolvedKey) throw new Error('GEMINI_API_KEY is not configured')
+const baseGeminiTransport = (apiKey?: string): ProviderStreamTransport =>
+  async function* (input, signal) {
+    const resolvedKey = apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY
+    if (!resolvedKey) throw new Error('GEMINI_API_KEY (or GOOGLE_API_KEY) is not configured')
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${resolvedKey}&alt=sse`
 
@@ -193,6 +226,7 @@ export const geminiTransport = (apiKey?: string): ProviderStreamTransport =>
         contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
         generationConfig: { maxOutputTokens: 8192 },
       }),
+      signal,
     })
 
     if (!response.ok) {
@@ -202,3 +236,6 @@ export const geminiTransport = (apiKey?: string): ProviderStreamTransport =>
 
     yield* streamGeminiResponse(response)
   }
+
+export const geminiTransport = (apiKey?: string): ProviderStreamTransport =>
+  withProviderTimeout(baseGeminiTransport(apiKey))

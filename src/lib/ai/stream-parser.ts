@@ -130,12 +130,23 @@ export class StreamParser {
     return { visibleText, htmlDelta, cssDelta }
   }
 
-  /** Flush any pending buffer at end of stream. Unmatched partial tags become visible text. */
+  /** Flush any pending buffer at end of stream. */
   flush(): ParsedChunk {
-    const visibleText = this.buf
+    const pending = this.buf
+    const state = this.state
+
     this.buf = ''
     this.state = 'TEXT'
-    return { visibleText, htmlDelta: '', cssDelta: '' }
+
+    if (state === 'IN_HTML' || state === 'MAYBE_HTML_CLOSE') {
+      return { visibleText: '', htmlDelta: pending, cssDelta: '' }
+    }
+
+    if (state === 'IN_CSS' || state === 'MAYBE_CSS_CLOSE') {
+      return { visibleText: '', htmlDelta: '', cssDelta: pending }
+    }
+
+    return { visibleText: pending, htmlDelta: '', cssDelta: '' }
   }
 
   reset(): void {

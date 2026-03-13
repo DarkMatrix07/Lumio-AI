@@ -19,7 +19,7 @@ export function GET(): Response {
       headers: {
         // SameSite=Strict prevents the cookie from being sent on cross-site requests.
         // Not httpOnly so same-origin JS can mirror it into the X-CSRF-Token header.
-        'Set-Cookie': `${CSRF_COOKIE_NAME}=${token}; Path=/; SameSite=Strict`,
+        'Set-Cookie': `${CSRF_COOKIE_NAME}=${token}; Path=/; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
       },
     },
   )
