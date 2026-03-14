@@ -17,7 +17,7 @@ import { GrapesCanvas } from '@/components/canvas/GrapesCanvas'
 
 describe('GrapesCanvas', () => {
   test('uses dynamic wrapper with ssr disabled', () => {
-    render(<GrapesCanvas />)
+    render(<GrapesCanvas blocksContainer={null} layersContainer={null} />)
 
     const shell = screen.getByTestId('grapes-dynamic-shell')
     expect(shell).toBeInTheDocument()

@@ -83,9 +83,11 @@ vi.mock('@/components/canvas/GrapesCanvas', () => ({
 
 import { BuilderStudio } from '@/components/studio/BuilderStudio'
 import { BUILDER_LAYOUT, BUILDER_TEST_IDS } from '@/components/studio/builder-layout'
+import { useBackendGraphStore } from '@/store/backend-graph-store'
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  useBackendGraphStore.getState().reset()
 
   setHtml.mockClear()
   setCss.mockClear()
@@ -138,6 +140,26 @@ describe('BuilderStudio', () => {
     expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:lumio')
   })
 
+  test('blocks export when backend graph validation fails', async () => {
+    useBackendGraphStore.getState().addNode({
+      id: 'invalid-get',
+      type: 'GET',
+      label: 'GET invalid',
+      config: {},
+    })
+
+    render(<BuilderStudio />)
+
+    fireEvent.click(screen.getByTestId('builder-export-zip'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('builder-export-error')).toHaveTextContent('GET node invalid-get is missing config.path')
+    })
+
+    expect(createObjectUrlSpy).not.toHaveBeenCalled()
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
+  })
+
   test('renders canvas and chat panels', () => {
     render(<BuilderStudio />)
 
@@ -173,6 +195,17 @@ describe('BuilderStudio', () => {
     expect(screen.getByTestId('builder-export-zip')).toBeDefined()
     expect(screen.getByTestId('builder-toggle-assistant')).toBeDefined()
     expect(screen.queryByTestId('builder-export-error')).toBeNull()
+  })
+
+  test('shows Routes option above Backend in command rail', () => {
+    render(<BuilderStudio />)
+
+    const routesButton = screen.getByTitle('Routes')
+    const backendButton = screen.getByTitle('Backend')
+
+    expect(routesButton).toBeDefined()
+    expect(backendButton).toBeDefined()
+    expect(routesButton.compareDocumentPosition(backendButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   test('toggles AI assistant panel from top bar button', () => {
@@ -308,5 +341,14 @@ describe('BuilderStudio', () => {
 
     fireEvent.click(screen.getByTestId('builder-toggle-right-panel'))
     expect(screen.getByTestId('builder-right-panel')).toBeDefined()
+  })
+
+  test('renders the backend panel when the backend tab is selected', () => {
+    render(<BuilderStudio />)
+
+    fireEvent.click(screen.getByTitle('Backend'))
+
+    expect(screen.getByTestId('backend-panel')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Search backend blocks')).toBeInTheDocument()
   })
 })

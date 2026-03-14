@@ -7,6 +7,16 @@ const DANGEROUS_CSS_URL_PATTERN = /url\s*\(\s*['"]?\s*javascript:/gi
 // Strip all @font-face blocks from AI-generated CSS (single-level braces, common case).
 const CSS_FONT_FACE_PATTERN = /@font-face\s*\{[^{}]*\}/gi
 
+// Patterns dangerous inside inline style attribute values
+const DANGEROUS_STYLE_PATTERNS: RegExp[] = [
+  /expression\s*\(/gi,
+  /javascript\s*:/gi,
+  /url\s*\(\s*['"]?\s*javascript:/gi,
+  /-moz-binding\s*:/gi,
+  /behavior\s*:/gi,
+  /@import\b/gi,
+]
+
 const ALLOWED_HTML_TAGS = new Set([
   'a',
   'abbr',
@@ -43,6 +53,7 @@ const ALLOWED_HTML_TAGS = new Set([
   'section',
   'select',
   'small',
+  'source',
   'span',
   'strong',
   'table',
@@ -54,9 +65,10 @@ const ALLOWED_HTML_TAGS = new Set([
   'tr',
   'u',
   'ul',
+  'video',
 ])
 
-const GLOBAL_ATTRS = new Set(['class', 'id', 'title', 'role', 'aria-label', 'aria-hidden'])
+const GLOBAL_ATTRS = new Set(['class', 'id', 'style', 'title', 'role', 'aria-label', 'aria-hidden'])
 const ALLOWED_URL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:'])
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/
 
@@ -68,6 +80,8 @@ const TAG_ATTRS: Record<string, Set<string>> = {
   select: new Set(['name', 'disabled']),
   button: new Set(['type', 'name', 'value', 'disabled']),
   form: new Set(['action', 'method']),
+  video: new Set(['controls', 'autoplay', 'loop', 'muted', 'poster', 'width', 'height', 'preload']),
+  source: new Set(['src', 'type']),
 }
 
 const isSafeUrl = (value: string): boolean => {
@@ -93,11 +107,32 @@ const isSafeUrl = (value: string): boolean => {
   }
 }
 
+const sanitizeStyleValue = (value: string): string => {
+  let cleaned = value
+  for (const pattern of DANGEROUS_STYLE_PATTERNS) {
+    // Reset lastIndex for global regexes reused across calls
+    pattern.lastIndex = 0
+    cleaned = cleaned.replace(pattern, '')
+  }
+  return cleaned.trim()
+}
+
 const sanitizeAttribute = (element: Element, attrName: string, attrValue: string): void => {
   const lowerName = attrName.toLowerCase()
 
   if (lowerName.startsWith('on')) {
     element.removeAttribute(attrName)
+    return
+  }
+
+  // Sanitize style attribute values instead of stripping them entirely
+  if (lowerName === 'style') {
+    const safeStyle = sanitizeStyleValue(attrValue)
+    if (safeStyle) {
+      element.setAttribute(attrName, safeStyle)
+    } else {
+      element.removeAttribute(attrName)
+    }
     return
   }
 

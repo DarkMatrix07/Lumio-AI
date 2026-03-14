@@ -7,7 +7,7 @@ type AnthropicSseEvent = {
   delta?: { type: string; text?: string }
 }
 
-const PROVIDER_TIMEOUT_MS = 30_000
+const PROVIDER_TIMEOUT_MS = 120_000
 
 export const createTimeoutController = (timeoutMs = PROVIDER_TIMEOUT_MS) => {
   const controller = new AbortController()
@@ -217,7 +217,7 @@ const baseGeminiTransport = (apiKey?: string): ProviderStreamTransport =>
     const resolvedKey = apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY
     if (!resolvedKey) throw new Error('GEMINI_API_KEY (or GOOGLE_API_KEY) is not configured')
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${resolvedKey}&alt=sse`
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent?key=${resolvedKey}&alt=sse`
 
     const response = await fetch(url, {
       method: 'POST',

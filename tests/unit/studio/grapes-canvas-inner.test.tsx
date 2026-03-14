@@ -62,4 +62,41 @@ describe('GrapesCanvasInner', () => {
       avoidInlineStyle: false,
     })
   })
+
+  test('keeps templates as landing pages with explicit colorful backgrounds', async () => {
+    const blocksContainer = document.createElement('div')
+    const layersContainer = document.createElement('div')
+
+    render(
+      <GrapesCanvasInner
+        blocksContainer={blocksContainer}
+        layersContainer={layersContainer}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(initSpy).toHaveBeenCalledTimes(1)
+    })
+
+    const initConfig = initSpy.mock.calls[0][0] as {
+      blockManager: { blocks: Array<{ category?: string; label?: string; content?: string }> }
+    }
+
+    const templates = initConfig.blockManager.blocks.filter((block) => block.category === 'Templates')
+
+    expect(templates.length).toBeGreaterThan(0)
+
+    for (const block of templates) {
+      const label = String(block.label ?? '')
+      const content = String(block.content ?? '').toLowerCase()
+
+      expect(label).toContain('Landing')
+      expect(content).toContain('<section')
+      expect(content).toMatch(/background\s*:/)
+      expect(content).not.toMatch(/background\s*:\s*#fff([;\"'])?/)
+      expect(content).not.toMatch(/background\s*:\s*#ffffff([;\"'])?/)
+      expect(content).not.toMatch(/background\s*:\s*#f8fafc([;\"'])?/)
+      expect(content).not.toMatch(/background\s*:\s*#f9fafb([;\"'])?/)
+    }
+  })
 })

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test.describe('Builder Studio', () => {
+test.describe('Builder Studio — Shell', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/builder')
   })
@@ -9,6 +9,12 @@ test.describe('Builder Studio', () => {
     await expect(page.getByTestId('builder-studio-shell')).toBeVisible()
     await expect(page.getByTestId('builder-canvas-panel')).toBeVisible()
     await expect(page.getByTestId('builder-chat-panel')).toBeVisible()
+  })
+
+  test('loads the redesigned shell zones', async ({ page }) => {
+    await expect(page.getByTestId('builder-command-rail')).toBeVisible()
+    await expect(page.getByTestId('builder-primary-workspace')).toBeVisible()
+    await expect(page.getByTestId('builder-assistant-workspace')).toBeVisible()
   })
 
   test('chat panel shows input and send button', async ({ page }) => {
@@ -45,9 +51,81 @@ test.describe('Builder Studio', () => {
   })
 })
 
+test.describe('Left Rail — Panel Switching', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/builder')
+  })
+
+  test('left rail has all 7 navigation items', async ({ page }) => {
+    const rail = page.getByTestId('builder-command-rail')
+    for (const label of ['Add', 'Templates', 'Pages', 'Layers', 'Global', 'Code', 'Backend']) {
+      await expect(rail.getByTitle(label)).toBeVisible()
+    }
+  })
+
+  test('clicking Pages shows page management panel', async ({ page }) => {
+    await page.getByTitle('Pages').click()
+    await expect(page.getByText('+ New Page')).toBeVisible()
+    await expect(page.getByText('Home')).toBeVisible()
+  })
+
+  test('clicking Code shows HTML/CSS editor', async ({ page }) => {
+    await page.getByTitle('Code').click()
+    await expect(page.getByText('HTML')).toBeVisible()
+    await expect(page.getByText('CSS')).toBeVisible()
+    await expect(page.getByText('Apply Changes')).toBeVisible()
+    await expect(page.getByText('Refresh')).toBeVisible()
+  })
+
+  test('clicking Global shows CSS editor', async ({ page }) => {
+    await page.getByTitle('Global').click()
+    await expect(page.getByText('Custom CSS')).toBeVisible()
+    await expect(page.getByText('Apply Global Styles')).toBeVisible()
+  })
+
+  test('clicking Backend shows coming-soon placeholder', async ({ page }) => {
+    await page.getByTitle('Backend').click()
+    await expect(page.getByText('Backend Builder')).toBeVisible()
+  })
+
+  test('toggling same rail item closes the panel', async ({ page }) => {
+    // Add panel should be open by default
+    await page.getByTitle('Add').click() // close it
+    // Panel header should not be visible
+    await expect(page.getByText('Add Elements')).not.toBeVisible()
+  })
+})
+
+test.describe('Device Switcher', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/builder')
+  })
+
+  test('shows Desktop as default device', async ({ page }) => {
+    await expect(page.getByText('Desktop · 1366px')).toBeVisible()
+  })
+
+  test('switching to Tablet updates device info', async ({ page }) => {
+    await page.getByTitle('Tablet').click()
+    await expect(page.getByText('Tablet · 768px')).toBeVisible()
+  })
+
+  test('switching to Mobile updates device info', async ({ page }) => {
+    await page.getByTitle('Mobile').click()
+    await expect(page.getByText('Mobile · 375px')).toBeVisible()
+  })
+})
+
+test.describe('Top Bar — Undo/Redo', () => {
+  test('undo and redo buttons are visible', async ({ page }) => {
+    await page.goto('/builder')
+    await expect(page.getByTitle('Undo (Ctrl+Z)')).toBeVisible()
+    await expect(page.getByTitle('Redo (Ctrl+Y)')).toBeVisible()
+  })
+})
+
 test.describe('Chat generate flow (mocked API)', () => {
   test('submitting a prompt shows user message and streaming indicator', async ({ page }) => {
-    // Mock the generate endpoint to return a slow stream
     await page.route('/api/generate', async (route) => {
       const body = [
         JSON.stringify({ type: 'text', value: 'Building your navbar…' }),
@@ -68,11 +146,9 @@ test.describe('Chat generate flow (mocked API)', () => {
     await expect(page.getByTestId('chat-send-button')).toBeEnabled()
     await page.getByTestId('chat-send-button').click()
 
-    // User message appears immediately
     await expect(page.getByTestId('chat-message-user')).toBeVisible()
     await expect(page.getByTestId('chat-message-user')).toContainText('Add a navbar')
 
-    // Assistant reply eventually appears
     await expect(page.getByTestId('chat-message-assistant')).toBeVisible({ timeout: 10_000 })
   })
 })

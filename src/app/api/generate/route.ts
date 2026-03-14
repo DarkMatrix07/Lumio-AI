@@ -123,7 +123,7 @@ export async function POST(request: Request): Promise<Response> {
         controller.enqueue(
           encodeEvent(encoder, {
             type: 'error',
-            message: 'Generation failed',
+            message: err instanceof Error ? err.message : String(err),
           }),
         )
       }

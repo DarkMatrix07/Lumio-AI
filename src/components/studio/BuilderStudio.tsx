@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { generateBackendFiles } from '@/lib/backend/codegen'
+import { validateBackendGraph } from '@/lib/backend/graph-validator'
 import { buildExportFilename, buildProjectZip } from '@/lib/export/client-zip'
 import type { CanvasEditorBridge, PageInfo } from '@/components/canvas/GrapesCanvas'
 import { GrapesCanvas } from '@/components/canvas/GrapesCanvas'
 import { ChatPanel } from '@/components/studio/ChatPanel'
+import { BackendPanel } from '@/components/studio/BackendPanel'
 import { BUILDER_LAYOUT, BUILDER_TEST_IDS } from '@/components/studio/builder-layout'
 import { TopBar } from '@/components/studio/TopBar'
 import { useBackendGraphStore } from '@/store/backend-graph-store'
@@ -19,6 +21,7 @@ const LEFT_RAIL_ITEMS = [
   { id: 'layers',    label: 'Layers',    icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M10 3l8 5-8 5-8-5z"/><path d="M2 13l8 5 8-5" opacity=".5"/></svg> },
   { id: 'global',    label: 'Global',    icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7"/><path d="M3 10h14"/><ellipse cx="10" cy="10" rx="3.5" ry="7"/></svg> },
   { id: 'code',      label: 'Code',      icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M7 5l-4 5 4 5M13 5l4 5-4 5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+  { id: 'routes',    label: 'Routes',    icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="4" cy="10" r="1.4"/><circle cx="10" cy="4" r="1.4"/><circle cx="10" cy="16" r="1.4"/><circle cx="16" cy="10" r="1.4"/><path d="M5.4 9.2L8.6 5.8M11.4 5.8L14.6 9.2M14.6 10.8L11.4 14.2M8.6 14.2L5.4 10.8" strokeLinecap="round"/></svg> },
   { id: 'backend',   label: 'Backend',   icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="4" y="3" width="12" height="5" rx="1"/><rect x="4" y="12" width="12" height="5" rx="1"/><path d="M10 8v4"/></svg> },
 ] as const
 
@@ -158,6 +161,12 @@ export function BuilderStudio() {
     try {
       setExportError(null)
       const { nodes, edges } = useBackendGraphStore.getState()
+      const validationErrors = validateBackendGraph({ nodes, edges })
+      if (validationErrors.length > 0) {
+        setExportError(validationErrors[0] ?? 'Export failed. Please try again.')
+        return
+      }
+
       const files = generateBackendFiles({ nodes, edges })
       const blob = await buildProjectZip(files)
       objectUrl = URL.createObjectURL(blob)
@@ -214,6 +223,7 @@ export function BuilderStudio() {
     layers: 'Layers',
     global: 'Global Styles',
     code: 'Code',
+    routes: 'Routes',
     backend: 'Backend',
   }
 
@@ -262,7 +272,7 @@ export function BuilderStudio() {
         {/* ═══ Left panel (collapsible) ═══ */}
         <div
           className="flex-shrink-0 bg-[#1b1b1f] border-r border-[#232326] flex flex-col overflow-hidden transition-[width] duration-150"
-          style={{ width: activeRail !== null ? 280 : 0 }}
+          style={{ width: activeRail !== null && activeRail !== 'backend' ? 280 : 0 }}
         >
           <div className="flex items-center justify-between px-4 h-10 border-b border-[#232326] flex-shrink-0">
             <span className="text-[12px] font-semibold text-zinc-300">{activeRail ? panelTitle[activeRail] : ''}</span>
@@ -411,13 +421,14 @@ export function BuilderStudio() {
               </div>
             </div>
 
-            <div className="p-4 text-center mt-6" style={{ display: activeRail === 'backend' ? 'block' : 'none' }}>
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#444" strokeWidth="1.5" className="mx-auto mb-3"><rect x="4" y="2" width="16" height="7" rx="2"/><rect x="4" y="15" width="16" height="7" rx="2"/><path d="M12 9v6"/><circle cx="8" cy="5.5" r="1" fill="#444"/><circle cx="8" cy="18.5" r="1" fill="#444"/></svg>
-              <p className="text-[11px] text-zinc-500 font-medium mb-1">Backend Builder</p>
+            <div className="p-4 text-center mt-6" style={{ display: activeRail === 'routes' ? 'block' : 'none' }}>
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#444" strokeWidth="1.5" className="mx-auto mb-3"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="18" cy="12" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.5 10.5L10.5 7.5M13.5 7.5L16.5 10.5M16.5 13.5L13.5 16.5M10.5 16.5L7.5 13.5" strokeLinecap="round"/></svg>
+              <p className="text-[11px] text-zinc-500 font-medium mb-1">Routes Builder</p>
               <p className="text-[10px] text-zinc-600 leading-relaxed">
-                API routes, models, and middleware.<br/>Coming in next update.
+                Define app routes and navigation flow.<br/>Coming in next update.
               </p>
             </div>
+
           </div>
         </div>
 
@@ -426,65 +437,65 @@ export function BuilderStudio() {
           data-testid={BUILDER_TEST_IDS.primaryWorkspace}
           className="flex-1 min-w-0 flex flex-col overflow-hidden"
         >
-          {/* Canvas */}
-          <section
-            data-testid="builder-canvas-panel"
-            className="h-full flex flex-col overflow-hidden"
-          >
-            <GrapesCanvas
-              className="flex-1 w-full h-full"
-              onEditorReady={setEditorBridge}
-              blocksContainer={blocksContainerEl}
-              layersContainer={layersContainerEl}
-              rightPanelOpen={rightPanelOpen}
-              onToggleRightPanel={() => setRightPanelOpen((prev) => !prev)}
-            />
-          </section>
-
-          {/* ═══ Bottom bar — device switcher + zoom ═══ */}
-          <div className="h-7 flex-shrink-0 flex items-center px-3 gap-3 bg-[#18181b] border-t border-[#232326] text-zinc-600">
-            {/* Device buttons */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                title="Desktop"
-                onClick={() => handleDeviceSwitch('Desktop')}
-                className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Desktop' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
+          {activeRail === 'backend' ? (
+            <BackendPanel />
+          ) : (
+            <>
+              {/* Canvas */}
+              <section
+                data-testid="builder-canvas-panel"
+                className="h-full flex flex-col overflow-hidden"
               >
-                <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="12" height="9" rx="1.5"/><path d="M5 13h6"/><path d="M8 11v2"/></svg>
-              </button>
-              <button
-                type="button"
-                title="Tablet"
-                onClick={() => handleDeviceSwitch('Tablet')}
-                className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Tablet' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
-              >
-                <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="1" width="10" height="14" rx="1.5"/><circle cx="8" cy="13" r=".5" fill="currentColor"/></svg>
-              </button>
-              <button
-                type="button"
-                title="Mobile"
-                onClick={() => handleDeviceSwitch('Mobile')}
-                className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Mobile' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
-              >
-                <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4" y="1" width="8" height="14" rx="1.5"/><circle cx="8" cy="13" r=".5" fill="currentColor"/></svg>
-              </button>
-            </div>
+                <GrapesCanvas
+                  className="flex-1 w-full h-full"
+                  onEditorReady={setEditorBridge}
+                  blocksContainer={blocksContainerEl}
+                  layersContainer={layersContainerEl}
+                  rightPanelOpen={rightPanelOpen}
+                  onToggleRightPanel={() => setRightPanelOpen((prev) => !prev)}
+                />
+              </section>
 
-            <div className="w-px h-3.5 bg-[#2a2a2e]" />
+              {/* ═══ Bottom bar — device switcher + zoom ═══ */}
+              <div className="h-7 flex-shrink-0 flex items-center px-3 gap-3 bg-[#18181b] border-t border-[#232326] text-zinc-600">
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Desktop"
+                    onClick={() => handleDeviceSwitch('Desktop')}
+                    className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Desktop' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
+                  >
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="12" height="9" rx="1.5"/><path d="M5 13h6"/><path d="M8 11v2"/></svg>
+                  </button>
+                  <button
+                    type="button"
+                    title="Tablet"
+                    onClick={() => handleDeviceSwitch('Tablet')}
+                    className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Tablet' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
+                  >
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="1" width="10" height="14" rx="1.5"/><circle cx="8" cy="13" r=".5" fill="currentColor"/></svg>
+                  </button>
+                  <button
+                    type="button"
+                    title="Mobile"
+                    onClick={() => handleDeviceSwitch('Mobile')}
+                    className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Mobile' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
+                  >
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4" y="1" width="8" height="14" rx="1.5"/><circle cx="8" cy="13" r=".5" fill="currentColor"/></svg>
+                  </button>
+                </div>
 
-            {/* Canvas info — dynamic */}
-            <span className="text-[10px] text-zinc-500">{deviceInfo.label} · {deviceInfo.width}</span>
-
-            <div className="flex-1" />
-
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] text-zinc-600">Page</span>
-              <span className="text-[10px] text-zinc-700">›</span>
-              <span className="text-[10px] text-blue-400">Body</span>
-            </div>
-          </div>
+                <div className="w-px h-3.5 bg-[#2a2a2e]" />
+                <span className="text-[10px] text-zinc-500">{deviceInfo.label} · {deviceInfo.width}</span>
+                <div className="flex-1" />
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-zinc-600">Page</span>
+                  <span className="text-[10px] text-zinc-700">›</span>
+                  <span className="text-[10px] text-blue-400">Body</span>
+                </div>
+              </div>
+            </>
+          )}
         </section>
 
         {/* ═══ AI Assistant panel ═══ */}
