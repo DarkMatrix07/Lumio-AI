@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CanvasEditorBridge } from '@/components/canvas/GrapesCanvas'
 import { bindEditorSyncBridge } from '@/lib/canvas/editor-sync-bridge'
 import { useEditorUiStore } from '@/store/editor-ui-store'
+import type { Edge } from '@xyflow/react'
 import { useBackendGraphStore } from '@/store/backend-graph-store'
 import { useRoutesGraphStore } from '@/store/routes-graph-store'
 import { usePagesStore } from '@/store/pages-store'
@@ -154,7 +155,7 @@ const AUTH_LOGIN_PAGE_HTML = `<div style="min-height:100vh;display:flex;align-it
     <form id="login-form" style="display:flex;flex-direction:column;gap:16px;" onsubmit="return false;">
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#cbd5e1;margin-bottom:6px;">Email</label>
-        <input id="login-email" type="email" placeholder="admin@lumio.dev" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:10px;color:#f1f5f9;font-size:14px;outline:none;box-sizing:border-box;" />
+        <input id="login-email" type="email" placeholder="you@example.com" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:10px;color:#f1f5f9;font-size:14px;outline:none;box-sizing:border-box;" />
       </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#cbd5e1;margin-bottom:6px;">Password</label>
@@ -162,7 +163,6 @@ const AUTH_LOGIN_PAGE_HTML = `<div style="min-height:100vh;display:flex;align-it
       </div>
       <button type="submit" id="login-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity 0.2s;">Sign In</button>
     </form>
-    <p style="text-align:center;margin-top:20px;font-size:13px;color:#64748b;">Demo credentials: <span style="color:#94a3b8;">admin@lumio.dev</span> / <span style="color:#94a3b8;">lumio123</span></p>
   </div>
 </div>`
 
@@ -548,6 +548,42 @@ const GrapesCanvasInner: FC<GrapesCanvasInnerProps> = ({
         endpoints: ['POST /auth/login', 'GET /auth/me'],
         authNodes: ['JWT'],
       })
+
+      // 5. Auto-connect pages to service with edges
+      const currentEdges = useRoutesGraphStore.getState().edges
+      const loginPageNodeId = firstPage ? `page-${firstPage.id}` : null
+      const successPageNodeId = loginPage ? `page-${loginPage.id}` : null
+      const serviceNodeId = 'service-auth'
+      const newRouteEdges: Edge[] = []
+
+      if (loginPageNodeId) {
+        newRouteEdges.push({
+          id: `edge-login-btn-post`,
+          source: loginPageNodeId,
+          sourceHandle: 'Sign In Button',
+          target: serviceNodeId,
+          targetHandle: 'POST /auth/login',
+          animated: true,
+          style: { stroke: '#818cf8', strokeWidth: 2 },
+        })
+      }
+      if (successPageNodeId) {
+        newRouteEdges.push({
+          id: `edge-dashboard-get`,
+          source: successPageNodeId,
+          sourceHandle: 'Go to Dashboard',
+          target: serviceNodeId,
+          targetHandle: 'GET /auth/me',
+          animated: true,
+          style: { stroke: '#818cf8', strokeWidth: 2 },
+        })
+      }
+
+      const existingRouteEdgeIds = new Set(currentEdges.map((e) => e.id))
+      const filteredRouteEdges = newRouteEdges.filter((e) => !existingRouteEdgeIds.has(e.id))
+      if (filteredRouteEdges.length > 0) {
+        routesStore.setEdges([...currentEdges, ...filteredRouteEdges])
+      }
     })
 
     const cleanupBridge = bindEditorSyncBridge(editor, uiBridge)
