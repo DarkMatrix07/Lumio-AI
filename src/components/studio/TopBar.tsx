@@ -22,7 +22,7 @@ export function TopBar({ onExport, exportError, onUndo, onRedo, onToggleAssistan
         {/* Brand */}
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,.5)]" />
-          <span className="text-[13px] font-semibold text-white tracking-tight">Studio Editor</span>
+          <span className="text-[13px] font-bold text-white tracking-tight">Lumio</span>
         </div>
 
         {/* Undo / Redo */}
@@ -41,17 +41,8 @@ export function TopBar({ onExport, exportError, onUndo, onRedo, onToggleAssistan
           <span className="text-[10px] font-medium text-teal-400">Autosave On</span>
         </div>
 
-        {/* URL bar */}
-        <div className="hidden md:flex items-center gap-1.5 flex-1 max-w-md mx-auto">
-          <div className="flex items-center gap-2 w-full px-3 py-1.5 rounded-md bg-[#111113] border border-[#2a2a2e]">
-            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="#555" strokeWidth="1.5"><path d="M8 1v0a5 5 0 015 5v2a5 5 0 01-5 5v0a5 5 0 01-5-5V6a5 5 0 015-5z" /><path d="M1 8h14" /></svg>
-            <span className="text-[11px] text-zinc-600">https://yoursite.com/</span>
-            <span className="text-[11px] text-blue-400 hover:underline cursor-pointer">Connect Domain</span>
-          </div>
-        </div>
-
         {/* Spacer */}
-        <div className="flex-1 md:hidden" />
+        <div className="flex-1" />
 
         {/* Export error */}
         {exportError && (

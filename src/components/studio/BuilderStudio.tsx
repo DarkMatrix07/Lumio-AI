@@ -248,7 +248,7 @@ export function BuilderStudio() {
         {/* ═══ Left icon rail ═══ */}
         <aside
           data-testid={BUILDER_TEST_IDS.commandRail}
-          className={`${BUILDER_LAYOUT.commandRailWidth} flex-shrink-0 bg-[#18181b] border-r border-[#232326] flex flex-col items-center pt-2 gap-0.5 overflow-y-auto overflow-x-hidden`}
+          className={`${BUILDER_LAYOUT.commandRailWidth} flex-shrink-0 bg-[#18181b] border-r border-[#232326] flex flex-col items-center pt-3 gap-1 overflow-y-auto overflow-x-hidden`}
           aria-label="Builder command rail"
         >
           {LEFT_RAIL_ITEMS.map((item) => (
@@ -258,14 +258,14 @@ export function BuilderStudio() {
               title={item.label}
               onClick={() => toggleRail(item.id)}
               className={[
-                'w-11 flex flex-col items-center gap-0.5 py-1.5 rounded-md transition-all duration-100 group',
+                'w-12 flex flex-col items-center gap-1 py-2 rounded-lg transition-all duration-100 group',
                 activeRail === item.id
                   ? 'bg-blue-600/15 text-blue-400'
                   : 'text-zinc-600 hover:text-zinc-300 hover:bg-white/[.04]',
               ].join(' ')}
             >
               <span className="flex items-center justify-center">{item.icon}</span>
-              <span className={`text-[8px] font-medium leading-none ${activeRail === item.id ? 'text-blue-400' : 'text-zinc-600 group-hover:text-zinc-400'
+              <span className={`text-[9px] font-medium leading-none ${activeRail === item.id ? 'text-blue-400' : 'text-zinc-600 group-hover:text-zinc-400'
                 }`}>{item.label}</span>
             </button>
           ))}

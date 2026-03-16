@@ -1,5 +1,5 @@
 export const BUILDER_LAYOUT = {
-  commandRailWidth: 'w-12',
+  commandRailWidth: 'w-14',
   assistantPanelWidth: 'w-80',
 } as const
 
