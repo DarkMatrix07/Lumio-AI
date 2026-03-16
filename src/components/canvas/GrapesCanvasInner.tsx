@@ -8,6 +8,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CanvasEditorBridge } from '@/components/canvas/GrapesCanvas'
 import { bindEditorSyncBridge } from '@/lib/canvas/editor-sync-bridge'
 import { useEditorUiStore } from '@/store/editor-ui-store'
+import { useBackendGraphStore } from '@/store/backend-graph-store'
+import { useRoutesGraphStore } from '@/store/routes-graph-store'
+import { usePagesStore } from '@/store/pages-store'
 
 type GrapesCanvasInnerProps = {
   className?: string
@@ -137,6 +140,49 @@ const DARK_THEME_CSS = `
 /* ═══════════════════════════════════════════════════════════════════════════════
    Blocks
    ═══════════════════════════════════════════════════════════════════════════════ */
+/* ── Auth Flow template HTML ── */
+const AUTH_LOGIN_PAGE_HTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);font-family:Inter,system-ui,-apple-system,sans-serif;">
+  <div style="width:100%;max-width:420px;padding:40px;background:rgba(30,41,59,0.8);border:1px solid rgba(148,163,184,0.1);border-radius:20px;backdrop-filter:blur(12px);box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+    <div style="text-align:center;margin-bottom:32px;">
+      <div style="width:56px;height:56px;margin:0 auto 16px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:16px;display:flex;align-items:center;justify-content:center;">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      </div>
+      <h1 style="font-size:24px;font-weight:700;color:#f1f5f9;margin:0 0 6px;">Welcome back</h1>
+      <p style="font-size:14px;color:#94a3b8;margin:0;">Sign in to your account</p>
+    </div>
+    <div id="login-error" style="display:none;padding:12px 16px;margin-bottom:20px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#fca5a5;font-size:13px;text-align:center;">Invalid email or password</div>
+    <form id="login-form" style="display:flex;flex-direction:column;gap:16px;" onsubmit="return false;">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#cbd5e1;margin-bottom:6px;">Email</label>
+        <input id="login-email" type="email" placeholder="admin@lumio.dev" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:10px;color:#f1f5f9;font-size:14px;outline:none;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#cbd5e1;margin-bottom:6px;">Password</label>
+        <input id="login-password" type="password" placeholder="••••••••" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:10px;color:#f1f5f9;font-size:14px;outline:none;box-sizing:border-box;" />
+      </div>
+      <button type="submit" id="login-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity 0.2s;">Sign In</button>
+    </form>
+    <p style="text-align:center;margin-top:20px;font-size:13px;color:#64748b;">Demo credentials: <span style="color:#94a3b8;">admin@lumio.dev</span> / <span style="color:#94a3b8;">lumio123</span></p>
+  </div>
+</div>`
+
+const AUTH_SUCCESS_PAGE_HTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#052e16 0%,#14532d 50%,#052e16 100%);font-family:Inter,system-ui,-apple-system,sans-serif;">
+  <div style="width:100%;max-width:480px;padding:48px;background:rgba(20,83,45,0.6);border:1px solid rgba(74,222,128,0.15);border-radius:20px;backdrop-filter:blur(12px);box-shadow:0 25px 50px rgba(0,0,0,0.4);text-align:center;">
+    <div style="width:72px;height:72px;margin:0 auto 24px;background:linear-gradient(135deg,#22c55e,#16a34a);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+      <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <h1 style="font-size:28px;font-weight:800;color:#f0fdf4;margin:0 0 10px;">Login Successful!</h1>
+    <p style="font-size:16px;color:#86efac;margin:0 0 8px;">Welcome back, <span id="user-name" style="font-weight:700;color:#4ade80;">Admin</span></p>
+    <p style="font-size:14px;color:#6ee7b7;opacity:0.7;margin:0 0 32px;">You have been authenticated successfully.</p>
+    <div style="padding:20px;background:rgba(0,0,0,0.2);border-radius:12px;margin-bottom:24px;text-align:left;">
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(74,222,128,0.1);"><span style="color:#86efac;font-size:13px;">Role</span><span style="color:#f0fdf4;font-size:13px;font-weight:600;">Administrator</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(74,222,128,0.1);"><span style="color:#86efac;font-size:13px;">Session</span><span style="color:#f0fdf4;font-size:13px;font-weight:600;">Active</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:#86efac;font-size:13px;">Token</span><span style="color:#f0fdf4;font-size:13px;font-weight:600;font-family:monospace;">jwt_•••••</span></div>
+    </div>
+    <button style="padding:14px 32px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">Go to Dashboard</button>
+  </div>
+</div>`
+
 const BASIC_BLOCKS = [
   {
     id: '1-col', label: '1 Column', category: 'Basic', content: '<div style="padding:16px;min-height:80px;"></div>',
@@ -235,6 +281,10 @@ const BASIC_BLOCKS = [
   { id: 'tpl-lander-7', label: 'Lander 7', category: 'Templates', content: `<div><section style="padding:88px 34px;background:linear-gradient(135deg,#1f2937,#0891b2);color:#e0f2fe;"><h1 style="font-size:44px;margin:0 0 12px;line-height:1.1;">Make your offer impossible to ignore</h1><p style="max-width:640px;color:#e0f2fe;opacity:.9;">Ideal structure for webinars, launches, and promotional funnels.</p><button style="margin-top:18px;padding:12px 24px;background:#38bdf8;color:#082f49;border:none;border-radius:10px;">Reserve Spot</button></section></div>`, media: `<svg viewBox="0 0 24 24" width="28" height="28"><rect x="2" y="3" width="20" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>` },
   { id: 'tpl-lander-8', label: 'Lander 8', category: 'Templates', content: `<div><section style="padding:88px 34px;background:linear-gradient(135deg,#7f1d1d,#be123c);color:#ffe4e6;"><h1 style="font-size:44px;margin:0 0 12px;line-height:1.1;">Stand out with bold brand visuals</h1><p style="max-width:640px;color:#ffe4e6;opacity:.9;">High-impact color system for ecommerce and direct response pages.</p><button style="margin-top:18px;padding:12px 24px;background:#fb7185;color:#4c0519;border:none;border-radius:10px;">Shop Now</button></section></div>`, media: `<svg viewBox="0 0 24 24" width="28" height="28"><rect x="2" y="3" width="20" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>` },
   { id: 'tpl-lander-9', label: 'Lander 9', category: 'Templates', content: `<div><section style="padding:88px 34px;background:linear-gradient(135deg,#111827,#334155);color:#e2e8f0;"><h1 style="font-size:44px;margin:0 0 12px;line-height:1.1;">Enterprise-ready, conversion-focused</h1><p style="max-width:640px;color:#e2e8f0;opacity:.9;">Perfect for B2B products needing trust-first presentation and CTA.</p><button style="margin-top:18px;padding:12px 24px;background:#94a3b8;color:#0f172a;border:none;border-radius:10px;">Contact Sales</button></section></div>`, media: `<svg viewBox="0 0 24 24" width="28" height="28"><rect x="2" y="3" width="20" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>` },
+  { id: 'tpl-auth-flow', label: 'Auth Login Flow', category: 'Templates',
+    content: AUTH_LOGIN_PAGE_HTML,
+    media: `<svg viewBox="0 0 24 24" width="28" height="28"><rect x="5" y="3" width="14" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 16c0-2.2 1.8-4 4-4s4 1.8 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`
+  },
   { id: 'tpl-lander-10', label: 'Lander 10', category: 'Templates', content: `<div><section style="padding:88px 34px;background:linear-gradient(135deg,#052e16,#15803d);color:#dcfce7;"><h1 style="font-size:44px;margin:0 0 12px;line-height:1.1;">Simple page, high-quality results</h1><p style="max-width:640px;color:#dcfce7;opacity:.9;">Balanced hero section designed for quick edits and strong visual appeal.</p><button style="margin-top:18px;padding:12px 24px;background:#4ade80;color:#14532d;border:none;border-radius:10px;">Launch Now</button></section></div>`, media: `<svg viewBox="0 0 24 24" width="28" height="28"><rect x="2" y="3" width="20" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>` },
 ]
 
@@ -420,6 +470,84 @@ const GrapesCanvasInner: FC<GrapesCanvasInnerProps> = ({
 
         bm.render(filtered)
       },
+    })
+
+    /* ── Auth Flow template: auto-scaffold pages + backend + routes on drop ── */
+    editor.on('block:drag:stop', (component: unknown, block: { getId?: () => string } | undefined) => {
+      const blockId = block?.getId?.()
+      if (blockId !== 'tpl-auth-flow') return
+
+      // 1. Create the "Login Success" page
+      const pm = editor.Pages
+      if (pm) {
+        const successPage = pm.add({ name: 'Login Success' })
+        if (successPage) {
+          const mainComp = successPage.getMainComponent?.()
+          if (mainComp) {
+            mainComp.components(AUTH_SUCCESS_PAGE_HTML)
+          }
+        }
+      }
+
+      // 2. Sync pages to store
+      const allPages = pm
+        ? pm.getAll().map((p: { getId: () => string; getName: () => string }, i: number) => ({
+            id: p.getId(),
+            name: p.getName() || 'Untitled',
+            path: i === 0 ? '/' : `/${(p.getName() || 'untitled').toLowerCase().replace(/\s+/g, '-')}`,
+          }))
+        : []
+      usePagesStore.getState().setPages(allPages)
+
+      // 3. Add backend auth nodes
+      const backendStore = useBackendGraphStore.getState()
+      const authNodes = [
+        { id: 'auth-jwt', type: 'JWT' as const, label: 'JWT Auth', config: {} },
+        { id: 'auth-model-user', type: 'Model' as const, label: 'User', config: { model: 'User', fields: 'email,password,name' } },
+        { id: 'auth-post-login', type: 'POST' as const, label: 'POST /auth/login', config: { path: '/auth/login' } },
+        { id: 'auth-get-me', type: 'GET' as const, label: 'GET /auth/me', config: { path: '/auth/me' } },
+      ]
+      const authEdges = [
+        { id: 'auth-edge-jwt-login', source: 'auth-jwt', target: 'auth-post-login' },
+        { id: 'auth-edge-jwt-me', source: 'auth-jwt', target: 'auth-get-me' },
+        { id: 'auth-edge-model-login', source: 'auth-model-user', target: 'auth-post-login' },
+      ]
+      const existingIds = new Set(backendStore.nodes.map((n) => n.id))
+      const newNodes = authNodes.filter((n) => !existingIds.has(n.id))
+      const existingEdgeIds = new Set(backendStore.edges.map((e) => e.id))
+      const newEdges = authEdges.filter((e) => !existingEdgeIds.has(e.id))
+      if (newNodes.length > 0 || newEdges.length > 0) {
+        backendStore.setNodes([...backendStore.nodes, ...newNodes])
+        backendStore.setEdges([...backendStore.edges, ...newEdges])
+      }
+
+      // 4. Add route graph nodes (login page → auth service)
+      const routesStore = useRoutesGraphStore.getState()
+      const loginPage = allPages.find((p: { name: string }) => p.name === 'Login Success') ?? allPages[allPages.length - 1]
+      const firstPage = allPages[0]
+      if (firstPage) {
+        routesStore.addPageNode({
+          id: firstPage.id,
+          name: firstPage.name,
+          path: firstPage.path,
+          elements: ['Sign In Button', 'Email Input', 'Password Input'],
+        })
+      }
+      if (loginPage) {
+        routesStore.addPageNode({
+          id: loginPage.id,
+          name: loginPage.name,
+          path: loginPage.path,
+          elements: ['Go to Dashboard'],
+        })
+      }
+      routesStore.addServiceNode({
+        id: 'auth',
+        label: 'Auth Service',
+        port: 3001,
+        endpoints: ['POST /auth/login', 'GET /auth/me'],
+        authNodes: ['JWT'],
+      })
     })
 
     const cleanupBridge = bindEditorSyncBridge(editor, uiBridge)
