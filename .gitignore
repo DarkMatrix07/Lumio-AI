@@ -42,3 +42,9 @@ next-env.d.ts
 
 # local worktrees
 /.worktrees/
+
+# claude / playwright artifacts
+.claude/worktrees/
+.playwright-mcp/
+.superpowers/
+get_git.js
