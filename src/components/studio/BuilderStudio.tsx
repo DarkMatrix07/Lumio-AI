@@ -1,62 +1,67 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { generateBackendFiles } from '@/lib/backend/codegen'
-import { validateBackendGraph } from '@/lib/backend/graph-validator'
-import { buildExportFilename, buildProjectZip } from '@/lib/export/client-zip'
 import type { CanvasEditorBridge, PageInfo } from '@/components/canvas/GrapesCanvas'
 import { GrapesCanvas } from '@/components/canvas/GrapesCanvas'
 import { ChatPanel } from '@/components/studio/ChatPanel'
 import { BackendPanel } from '@/components/studio/BackendPanel'
 import { BUILDER_LAYOUT, BUILDER_TEST_IDS } from '@/components/studio/builder-layout'
+import { FullProjectModal } from '@/components/studio/FullProjectModal'
 import { TopBar } from '@/components/studio/TopBar'
+import { DeployToVercelModal } from '@/components/studio/DeployToVercelModal'
+import { RoutesPanel } from '@/components/studio/RoutesPanel'
+import { RoutesSidebarContent } from '@/components/studio/RoutesSidebarContent'
 import { useBackendGraphStore } from '@/store/backend-graph-store'
+import { usePagesStore } from '@/store/pages-store'
 
 /* ── Left rail icon definitions ── */
 const LEFT_RAIL_ITEMS = [
-  { id: 'add',       label: 'Add',       icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><line x1="10" y1="4" x2="10" y2="16" strokeLinecap="round"/><line x1="4" y1="10" x2="16" y2="10" strokeLinecap="round"/></svg> },
-  { id: 'templates', label: 'Templates', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="14" height="14" rx="2"/><line x1="3" y1="8" x2="17" y2="8"/><line x1="8" y1="8" x2="8" y2="17"/></svg> },
-  { id: 'pages',     label: 'Pages',     icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M5 2h7l4 4v12a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M12 2v4h4"/></svg> },
-  { id: 'layers',    label: 'Layers',    icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M10 3l8 5-8 5-8-5z"/><path d="M2 13l8 5 8-5" opacity=".5"/></svg> },
-  { id: 'global',    label: 'Global',    icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7"/><path d="M3 10h14"/><ellipse cx="10" cy="10" rx="3.5" ry="7"/></svg> },
-  { id: 'code',      label: 'Code',      icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M7 5l-4 5 4 5M13 5l4 5-4 5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-  { id: 'routes',    label: 'Routes',    icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="4" cy="10" r="1.4"/><circle cx="10" cy="4" r="1.4"/><circle cx="10" cy="16" r="1.4"/><circle cx="16" cy="10" r="1.4"/><path d="M5.4 9.2L8.6 5.8M11.4 5.8L14.6 9.2M14.6 10.8L11.4 14.2M8.6 14.2L5.4 10.8" strokeLinecap="round"/></svg> },
-  { id: 'backend',   label: 'Backend',   icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="4" y="3" width="12" height="5" rx="1"/><rect x="4" y="12" width="12" height="5" rx="1"/><path d="M10 8v4"/></svg> },
+  { id: 'add', label: 'Add', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><line x1="10" y1="4" x2="10" y2="16" strokeLinecap="round" /><line x1="4" y1="10" x2="16" y2="10" strokeLinecap="round" /></svg> },
+  { id: 'templates', label: 'Templates', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="14" height="14" rx="2" /><line x1="3" y1="8" x2="17" y2="8" /><line x1="8" y1="8" x2="8" y2="17" /></svg> },
+  { id: 'pages', label: 'Pages', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M5 2h7l4 4v12a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z" /><path d="M12 2v4h4" /></svg> },
+  { id: 'layers', label: 'Layers', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M10 3l8 5-8 5-8-5z" /><path d="M2 13l8 5 8-5" opacity=".5" /></svg> },
+  { id: 'global', label: 'Global', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7" /><path d="M3 10h14" /><ellipse cx="10" cy="10" rx="3.5" ry="7" /></svg> },
+  { id: 'code', label: 'Code', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M7 5l-4 5 4 5M13 5l4 5-4 5" strokeLinecap="round" strokeLinejoin="round" /></svg> },
+  { id: 'routes', label: 'Routes', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="4" cy="10" r="1.4" /><circle cx="10" cy="4" r="1.4" /><circle cx="10" cy="16" r="1.4" /><circle cx="16" cy="10" r="1.4" /><path d="M5.4 9.2L8.6 5.8M11.4 5.8L14.6 9.2M14.6 10.8L11.4 14.2M8.6 14.2L5.4 10.8" strokeLinecap="round" /></svg> },
+  { id: 'backend', label: 'Backend', icon: <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="4" y="3" width="12" height="5" rx="1" /><rect x="4" y="12" width="12" height="5" rx="1" /><path d="M10 8v4" /></svg> },
 ] as const
 
 type LeftRailId = (typeof LEFT_RAIL_ITEMS)[number]['id']
 
 const DEVICE_INFO: Record<string, { label: string; width: string }> = {
   Desktop: { label: 'Desktop', width: '1366px' },
-  Tablet:  { label: 'Tablet',  width: '768px' },
-  Mobile:  { label: 'Mobile',  width: '375px' },
+  Tablet: { label: 'Tablet', width: '768px' },
+  Mobile: { label: 'Mobile', width: '375px' },
 }
 
 const emptyBridge: CanvasEditorBridge = {
   getHtml: () => '',
   getCss: () => '',
-  setHtml: () => {},
-  setCss: () => {},
+  setHtml: () => { },
+  setCss: () => { },
   editor: {},
-  undo: () => {},
-  redo: () => {},
-  setDevice: () => {},
+  undo: () => { },
+  redo: () => { },
+  setDevice: () => { },
   getPages: () => [{ id: 'default', name: 'Home' }],
   addPage: () => '',
-  selectPage: () => {},
-  removePage: () => {},
+  selectPage: () => { },
+  removePage: () => { },
   getSelectedPageId: () => 'default',
-  filterBlocks: () => {},
+  filterBlocks: () => { },
 }
 
 export function BuilderStudio() {
   const [editorBridge, setEditorBridge] = useState<CanvasEditorBridge>(emptyBridge)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [showFullProject, setShowFullProject] = useState(false)
   const [activeRail, setActiveRail] = useState<LeftRailId | null>('add')
   const [blockSearch, setBlockSearch] = useState('')
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
+  const [showDeploy, setShowDeploy] = useState(false)
 
   const [blocksContainerEl, setBlocksContainerEl] = useState<HTMLDivElement | null>(null)
   const [layersContainerEl, setLayersContainerEl] = useState<HTMLDivElement | null>(null)
@@ -114,10 +119,23 @@ export function BuilderStudio() {
     const p = editorBridge.getPages()
     setPages(p)
     setSelectedPageId(editorBridge.getSelectedPageId())
+    // Sync to Zustand store so RoutesSidebarContent picks up changes
+    usePagesStore.getState().setPages(
+      p.map((pg, i) => ({ id: pg.id, name: pg.name, path: i === 0 ? '/' : `/${pg.name.toLowerCase().replace(/\s+/g, '-')}` }))
+    )
   }, [editorBridge])
 
   useEffect(() => {
     if (activeRail === 'pages') refreshPages()
+  }, [activeRail, refreshPages])
+
+  /* Sync pages to store whenever the bridge changes (editor ready) or switching to routes */
+  useEffect(() => {
+    if (editorBridge !== emptyBridge) refreshPages()
+  }, [editorBridge, refreshPages])
+
+  useEffect(() => {
+    if (activeRail === 'routes') refreshPages()
   }, [activeRail, refreshPages])
 
   /* ── Device switch handler ── */
@@ -156,32 +174,16 @@ export function BuilderStudio() {
     refreshPages()
   }
 
-  const exportProjectZip = async () => {
-    let objectUrl: string | null = null
-    try {
-      setExportError(null)
-      const { nodes, edges } = useBackendGraphStore.getState()
-      const validationErrors = validateBackendGraph({ nodes, edges })
-      if (validationErrors.length > 0) {
-        setExportError(validationErrors[0] ?? 'Export failed. Please try again.')
-        return
-      }
+  const [exportedBackendFiles, setExportedBackendFiles] = useState<Record<string, string>>({})
+  const [exportedFrontendHtml, setExportedFrontendHtml] = useState('')
+  const [exportedFrontendCss, setExportedFrontendCss] = useState('')
 
-      const files = generateBackendFiles({ nodes, edges })
-      const blob = await buildProjectZip(files)
-      objectUrl = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      anchor.href = objectUrl
-      anchor.download = buildExportFilename()
-      document.body.appendChild(anchor)
-      anchor.click()
-      document.body.removeChild(anchor)
-    } catch (error) {
-      console.error('Failed to export project zip', error)
-      setExportError('Export failed. Please try again.')
-    } finally {
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
+  const handleExport = () => {
+    setExportError(null)
+    setExportedBackendFiles(generateBackendFiles(useBackendGraphStore.getState()))
+    setExportedFrontendHtml(editorBridge.getHtml())
+    setExportedFrontendCss(editorBridge.getCss())
+    setShowFullProject(true)
   }
 
   const openPreview = () => {
@@ -233,12 +235,13 @@ export function BuilderStudio() {
     <div className="h-screen flex flex-col bg-[#111113] text-zinc-200 overflow-hidden" data-testid="builder-studio-shell">
       {/* ═══ Top bar ═══ */}
       <TopBar
-        onExport={() => void exportProjectZip()}
+        onExport={handleExport}
         exportError={exportError}
         onUndo={editorBridge.undo}
         onRedo={editorBridge.redo}
         onToggleAssistant={() => setAssistantOpen((prev) => !prev)}
         onPreview={openPreview}
+        onPublish={() => setShowDeploy(true)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -262,9 +265,8 @@ export function BuilderStudio() {
               ].join(' ')}
             >
               <span className="flex items-center justify-center">{item.icon}</span>
-              <span className={`text-[8px] font-medium leading-none ${
-                activeRail === item.id ? 'text-blue-400' : 'text-zinc-600 group-hover:text-zinc-400'
-              }`}>{item.label}</span>
+              <span className={`text-[8px] font-medium leading-none ${activeRail === item.id ? 'text-blue-400' : 'text-zinc-600 group-hover:text-zinc-400'
+                }`}>{item.label}</span>
             </button>
           ))}
         </aside>
@@ -285,13 +287,13 @@ export function BuilderStudio() {
               }}
               className="w-6 h-6 flex items-center justify-center rounded text-zinc-600 hover:text-zinc-300 hover:bg-white/5 transition-colors"
             >
-              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 4L4 12M4 4l8 8" strokeLinecap="round"/></svg>
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 4L4 12M4 4l8 8" strokeLinecap="round" /></svg>
             </button>
           </div>
 
           <div className="px-4 pt-3 pb-2 border-b border-[#232326] flex-shrink-0" style={{ display: activeRail === 'add' || activeRail === 'templates' ? 'block' : 'none' }}>
             <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-[#111113] border border-[#2a2a2e]">
-              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="#666" strokeWidth="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="#666" strokeWidth="1.5"><circle cx="7" cy="7" r="5" /><path d="M11 11l3 3" strokeLinecap="round" /></svg>
               <input
                 type="text"
                 value={blockSearch}
@@ -329,15 +331,14 @@ export function BuilderStudio() {
                 {pages.map((page) => (
                   <div
                     key={page.id}
-                    className={`flex items-center justify-between p-2.5 rounded-md text-[11px] font-medium cursor-pointer transition-colors ${
-                      selectedPageId === page.id
+                    className={`flex items-center justify-between p-2.5 rounded-md text-[11px] font-medium cursor-pointer transition-colors ${selectedPageId === page.id
                         ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300'
                         : 'bg-[#1e1e22] border border-transparent text-zinc-400 hover:bg-[#262629] hover:text-zinc-300'
-                    }`}
+                      }`}
                     onClick={() => handleSelectPage(page.id)}
                   >
                     <div className="flex items-center gap-2">
-                      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 1h6l4 3v10a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z"/><path d="M10 1v3h4"/></svg>
+                      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 1h6l4 3v10a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" /><path d="M10 1v3h4" /></svg>
                       {page.name}
                     </div>
                     {pages.length > 1 && (
@@ -347,7 +348,7 @@ export function BuilderStudio() {
                         className="w-5 h-5 flex items-center justify-center rounded text-zinc-600 hover:text-red-400 hover:bg-red-500/10"
                         title="Delete page"
                       >
-                        <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 4L4 12M4 4l8 8" strokeLinecap="round"/></svg>
+                        <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 4L4 12M4 4l8 8" strokeLinecap="round" /></svg>
                       </button>
                     )}
                   </div>
@@ -381,18 +382,16 @@ export function BuilderStudio() {
                 <button
                   type="button"
                   onClick={() => setCodeTab('html')}
-                  className={`flex-1 py-2 text-[10px] font-semibold uppercase tracking-wider text-center transition-colors ${
-                    codeTab === 'html' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-zinc-600 hover:text-zinc-400'
-                  }`}
+                  className={`flex-1 py-2 text-[10px] font-semibold uppercase tracking-wider text-center transition-colors ${codeTab === 'html' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-zinc-600 hover:text-zinc-400'
+                    }`}
                 >
                   HTML
                 </button>
                 <button
                   type="button"
                   onClick={() => setCodeTab('css')}
-                  className={`flex-1 py-2 text-[10px] font-semibold uppercase tracking-wider text-center transition-colors ${
-                    codeTab === 'css' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-zinc-600 hover:text-zinc-400'
-                  }`}
+                  className={`flex-1 py-2 text-[10px] font-semibold uppercase tracking-wider text-center transition-colors ${codeTab === 'css' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-zinc-600 hover:text-zinc-400'
+                    }`}
                 >
                   CSS
                 </button>
@@ -421,12 +420,9 @@ export function BuilderStudio() {
               </div>
             </div>
 
-            <div className="p-4 text-center mt-6" style={{ display: activeRail === 'routes' ? 'block' : 'none' }}>
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#444" strokeWidth="1.5" className="mx-auto mb-3"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="18" cy="12" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.5 10.5L10.5 7.5M13.5 7.5L16.5 10.5M16.5 13.5L13.5 16.5M10.5 16.5L7.5 13.5" strokeLinecap="round"/></svg>
-              <p className="text-[11px] text-zinc-500 font-medium mb-1">Routes Builder</p>
-              <p className="text-[10px] text-zinc-600 leading-relaxed">
-                Define app routes and navigation flow.<br/>Coming in next update.
-              </p>
+            {/* Routes sidebar content */}
+            <div className="flex flex-col h-full" style={{ display: activeRail === 'routes' ? 'flex' : 'none' }}>
+              <RoutesSidebarContent />
             </div>
 
           </div>
@@ -437,25 +433,27 @@ export function BuilderStudio() {
           data-testid={BUILDER_TEST_IDS.primaryWorkspace}
           className="flex-1 min-w-0 flex flex-col overflow-hidden"
         >
-          {activeRail === 'backend' ? (
-            <BackendPanel />
-          ) : (
-            <>
-              {/* Canvas */}
-              <section
-                data-testid="builder-canvas-panel"
-                className="h-full flex flex-col overflow-hidden"
-              >
-                <GrapesCanvas
-                  className="flex-1 w-full h-full"
-                  onEditorReady={setEditorBridge}
-                  blocksContainer={blocksContainerEl}
-                  layersContainer={layersContainerEl}
-                  rightPanelOpen={rightPanelOpen}
-                  onToggleRightPanel={() => setRightPanelOpen((prev) => !prev)}
-                />
-              </section>
+          {activeRail === 'backend' && <BackendPanel />}
+          {activeRail === 'routes' && <RoutesPanel />}
 
+          {/* Canvas — always mounted so editorBridge stays live */}
+          <section
+            data-testid="builder-canvas-panel"
+            className="flex-1 flex flex-col overflow-hidden"
+            style={{ display: activeRail === 'backend' || activeRail === 'routes' ? 'none' : undefined }}
+          >
+            <GrapesCanvas
+              className="flex-1 w-full h-full"
+              onEditorReady={setEditorBridge}
+              blocksContainer={blocksContainerEl}
+              layersContainer={layersContainerEl}
+              rightPanelOpen={rightPanelOpen}
+              onToggleRightPanel={() => setRightPanelOpen((prev) => !prev)}
+            />
+          </section>
+
+          {activeRail !== 'backend' && activeRail !== 'routes' && (
+            <>
               {/* ═══ Bottom bar — device switcher + zoom ═══ */}
               <div className="h-7 flex-shrink-0 flex items-center px-3 gap-3 bg-[#18181b] border-t border-[#232326] text-zinc-600">
                 <div className="flex items-center gap-1">
@@ -465,7 +463,7 @@ export function BuilderStudio() {
                     onClick={() => handleDeviceSwitch('Desktop')}
                     className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Desktop' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
                   >
-                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="12" height="9" rx="1.5"/><path d="M5 13h6"/><path d="M8 11v2"/></svg>
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="12" height="9" rx="1.5" /><path d="M5 13h6" /><path d="M8 11v2" /></svg>
                   </button>
                   <button
                     type="button"
@@ -473,7 +471,7 @@ export function BuilderStudio() {
                     onClick={() => handleDeviceSwitch('Tablet')}
                     className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Tablet' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
                   >
-                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="1" width="10" height="14" rx="1.5"/><circle cx="8" cy="13" r=".5" fill="currentColor"/></svg>
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="1" width="10" height="14" rx="1.5" /><circle cx="8" cy="13" r=".5" fill="currentColor" /></svg>
                   </button>
                   <button
                     type="button"
@@ -481,7 +479,7 @@ export function BuilderStudio() {
                     onClick={() => handleDeviceSwitch('Mobile')}
                     className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeDevice === 'Mobile' ? 'text-blue-400 bg-blue-500/10' : 'hover:text-zinc-400 hover:bg-white/5'}`}
                   >
-                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4" y="1" width="8" height="14" rx="1.5"/><circle cx="8" cy="13" r=".5" fill="currentColor"/></svg>
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4" y="1" width="8" height="14" rx="1.5" /><circle cx="8" cy="13" r=".5" fill="currentColor" /></svg>
                   </button>
                 </div>
 
@@ -518,6 +516,22 @@ export function BuilderStudio() {
           </aside>
         </aside>
       </div>
+
+      {showDeploy && editorBridge && (
+        <DeployToVercelModal
+          onClose={() => setShowDeploy(false)}
+          editorBridge={editorBridge}
+        />
+      )}
+
+      {/* ═══ Full Project Code modal ═══ */}
+      <FullProjectModal
+        open={showFullProject}
+        onClose={() => setShowFullProject(false)}
+        frontendHtml={exportedFrontendHtml}
+        frontendCss={exportedFrontendCss}
+        backendFiles={exportedBackendFiles}
+      />
     </div>
   )
 }

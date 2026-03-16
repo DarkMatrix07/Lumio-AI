@@ -84,3 +84,45 @@ export type LumioContractValidationResult =
       success: false
       errors: string[]
     }
+
+export type LumioRoute = {
+  id: string
+  name: string
+  path: string
+  description?: string
+}
+
+export const MODEL_FIELD_TYPES = ['String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json'] as const
+export type ModelFieldType = (typeof MODEL_FIELD_TYPES)[number]
+
+export type ModelField = {
+  id: string
+  name: string
+  type: ModelFieldType
+  required: boolean
+}
+
+export type QueryParam = {
+  id: string
+  name: string
+  type: 'string' | 'number' | 'boolean'
+  required: boolean
+  description?: string
+}
+
+export type ResponseStatus = {
+  id: string
+  code: number
+  description: string
+}
+
+export type EndpointConfig = {
+  path: string
+  description?: string
+  queryParams?: QueryParam[]
+  requestBody?: string
+  responseDescription?: string
+  statuses?: ResponseStatus[]
+  auth?: 'none' | 'jwt' | 'apikey' | 'session' | 'oauth'
+  tags?: string
+}

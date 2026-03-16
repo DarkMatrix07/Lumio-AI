@@ -67,7 +67,7 @@ export const createBackendPaletteNode = (item: BackendPaletteItem, id: string): 
       type: 'Template',
       label: item.label,
       config: {
-        templateKind: item.templateKind,
+        templateKind: item.templateKind as LumioTemplateKind,
       },
     }
   }
