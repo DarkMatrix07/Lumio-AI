@@ -48,3 +48,13 @@ next-env.d.ts
 .playwright-mcp/
 .superpowers/
 get_git.js
+
+# test artifacts
+test-results/
+
+# scratch / debug scripts
+verify_key*.js
+gemini_test_native.js
+test-fetch.js
+test-gemini.js
+test.mjs
